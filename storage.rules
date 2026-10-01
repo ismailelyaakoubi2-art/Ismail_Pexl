@@ -1,0 +1,38 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (request.auth.token.role == 'ADMIN');
+    }
+    
+    function isValidFileSize() {
+      // Max 50MB
+      return request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // Client documents and files
+    match /clients/{clientId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidFileSize();
+      allow delete: if isAdmin();
+    }
+
+    // Project briefs, final delivery files, media
+    match /projects/{projectId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidFileSize();
+      allow delete: if isAdmin();
+    }
+
+    // Profile photos
+    match /profiles/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && isValidFileSize();
+    }
+  }
+}

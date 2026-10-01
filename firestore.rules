@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (getUserData().role == 'ADMIN' || request.auth.token.role == 'ADMIN');
+    }
+    
+    function isManager() {
+      return isAuthenticated() && (getUserData().role == 'MANAGER' || isAdmin());
+    }
+    
+    function isEmployee() {
+      return isAuthenticated();
+    }
+    
+    function isAssignedToProject(projectData) {
+      return request.auth.uid in projectData.assignedEmployeeIds;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || request.auth.uid == userId;
+    }
+
+    // Employees collection
+    match /employees/{employeeId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isManager();
+    }
+
+    // Clients collection
+    match /clients/{clientId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isManager() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Projects collection
+    match /projects/{projectId} {
+      allow read: if isManager() || isAdmin() || isAssignedToProject(resource.data);
+      allow create, delete: if isManager() || isAdmin();
+      allow update: if isManager() || isAdmin() || (
+        isAssignedToProject(resource.data) &&
+        // Employees can only update progress, status, or delivery notes
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'progress', 'notes', 'deliveryNotes', 'updatedAt'])
+      );
+    }
+
+    // Tasks collection
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow create: if isManager() || isAdmin();
+      allow update: if isManager() || isAdmin() || (
+        resource.data.assignedEmployeeId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'description'])
+      );
+      allow delete: if isManager() || isAdmin();
+    }
+
+    // Payments collection - sensitive financial data
+    match /payments/{paymentId} {
+      allow read, write: if isManager() || isAdmin();
+      // Regular employees cannot access payments
+    }
+
+    // Calendar events
+    match /calendarEvents/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if isManager() || isAdmin() || resource.data.assignedUserId == request.auth.uid;
+    }
+
+    // Reminders
+    match /reminders/{reminderId} {
+      allow read, write: if isAuthenticated() && (resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+      allow delete: if isAdmin() || resource.data.userId == request.auth.uid;
+    }
+
+    // Communication logs
+    match /communicationLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isManager() || isAdmin();
+    }
+
+    // Activity logs
+    match /activityLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Files metadata
+    match /files/{fileId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isManager() || isAdmin();
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "OmniAgency",
+  "description": "Production-ready Agency Management System with Projects, Clients, Kanban Tasks, Payments, Calendar, Analytics, and Firebase backend.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
